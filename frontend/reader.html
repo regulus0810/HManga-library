@@ -162,9 +162,10 @@
             document.body.style.backgroundImage = `url("assets/${encodeURIComponent(savedBg)}")`;
         }
 
-        // Đọc tham số từ thanh địa chỉ: comic_id, chapter_id và trang bắt đầu (page)
+        // Đọc tham số từ thanh địa chỉ: comic_id, chapter_id, nhentai_id và trang bắt đầu (page)
         const urlParams = new URLSearchParams(window.location.search);
         const comicId = urlParams.get("comic_id");
+        const nhentaiId = urlParams.get("nhentai_id");
         let currentChapterId = urlParams.get("chapter_id");
         const initialPage = parseInt(urlParams.get("page") || "1", 10);
 
@@ -286,6 +287,62 @@
 
         // 3.4. Khởi tạo thông tin truyện và danh sách Chapter trên thanh điều khiển
         async function initReader() {
+            if (nhentaiId) {
+                // TRƯỜNG HỢP 1: Đọc thử truyện tạm từ NHentai Favorites
+                if (backToDetailLink) {
+                    backToDetailLink.href = `detail.html?nhentai_id=${nhentaiId}`;
+                }
+
+                try {
+                    const resp = await fetch(`${API_BASE}/api/nhentai/${nhentaiId}`);
+                    const comic = await resp.json();
+                    if (!resp.ok) throw new Error(comic.detail || "Không thể tải truyện từ NHentai!");
+
+                    document.title = `Thư Viện HManga (Đọc thử) — ${comic.title}`;
+                    readerComicTitle.textContent = `[Đọc thử] ${comic.title}:`;
+
+                    chapterSelect.innerHTML = `<option value="all">Toàn bộ (${comic.num_pages} trang)</option>`;
+                    chapterSelect.disabled = true;
+
+                    // Chuẩn hóa danh sách trang ảnh để nạp vào khung đọc
+                    const pages = (comic.pages || []).map((pUrl, idx) => ({
+                        page_number: idx + 1,
+                        url: pUrl
+                    }));
+
+                    totalSlides = pages.length;
+                    totalPagesHorizontalEl.textContent = totalSlides;
+                    currentSlideIndex = 0;
+                    currentPageIndexEl.textContent = totalSlides > 0 ? 1 : 0;
+
+                    verticalContainer.innerHTML = pages.map(p =>
+                        `<img src="${getProxyImageUrl(p.url)}" alt="Trang ${p.page_number}" data-page="${p.page_number}" onload="this.style.minHeight='0'" style="width: 100vw; min-height: 100vh; height: auto; display: block;" loading="lazy">`
+                    ).join("");
+
+                    horizontalContainer.innerHTML = pages.map(p =>
+                        `<img src="${getProxyImageUrl(p.url)}" alt="Trang ${p.page_number}" data-page="${p.page_number}" style="flex: 0 0 100vw; width: 100vw; height: 100vh; object-fit: contain; scroll-snap-align: center; display: block;" loading="lazy">`
+                    ).join("");
+
+                    const targetIdx = initialPage > 0 && initialPage <= totalSlides ? initialPage - 1 : 0;
+                    if (targetIdx > 0) {
+                        currentSlideIndex = targetIdx;
+                        currentPageIndexEl.textContent = currentSlideIndex + 1;
+                        requestAnimationFrame(() => {
+                            if (modeHorizontal.checked) {
+                                scrollToHorizontalSlide(targetIdx, false);
+                            } else {
+                                const targetImg = verticalContainer.children[targetIdx];
+                                if (targetImg) targetImg.scrollIntoView({ block: "start" });
+                            }
+                        });
+                    }
+                } catch (err) {
+                    alert(`Lỗi tải truyện: ${err.message}`);
+                }
+                return;
+            }
+
+            // TRƯỜNG HỢP 2: Đọc truyện chính thức trong Supabase (Chạy code cũ)
             if (comicId && backToDetailLink) {
                 backToDetailLink.href = `detail.html?id=${comicId}`;
             }
@@ -302,7 +359,6 @@
 
                 const chapters = comic.chapters || [];
                 if (chapters.length > 0) {
-                    // Nếu URL chưa truyền chapter_id thì tự động chọn chapter chứa trang bắt đầu (initialPage)
                     if (!currentChapterId) {
                         const matchedCh = chapters.find(ch => initialPage >= ch.start_page && initialPage <= ch.end_page);
                         currentChapterId = matchedCh ? String(matchedCh.id) : String(chapters[0].id);

@@ -9,10 +9,20 @@ Các hàm chính:
 - extract_gallery_data(data)        : Bóc tách và làm sạch dữ liệu (tên truyện, ảnh bìa, tags, mã hóa đuôi ảnh...).
 - fetch_comic_from_nhentai(gallery_id): Hàm tổng hợp gọi liên tiếp 2 bước trên.
 """
-
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 import requests
 
 # ==================== 1. CẤU HÌNH ĐỊA CHỈ MÁY CHỦ NHENTAI ====================
+# Đọc file .env ở thư mục gốc hoặc trong thư mục backend/
+ROOT_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = Path(__file__).resolve().parent
+ENV_FILE = ROOT_DIR / ".env" if (ROOT_DIR / ".env").exists() else BACKEND_DIR / ".env"
+load_dotenv(ENV_FILE)
+
+NHENTAI_API_KEY = os.getenv("NHENTAI_API_KEY", "")
+
 NHENTAI_SERVER = "https://nhentai.net"       # Máy chủ chính chứa API v2
 IMAGE_SERVER = "https://i3.nhentai.net"      # Máy chủ CDN chứa ảnh trang truyện chất lượng gốc
 THUMB_SERVER = "https://t3.nhentai.net"      # Máy chủ CDN chứa ảnh bìa (cover) và ảnh thu nhỏ (thumbnail)
@@ -31,6 +41,11 @@ def get_gallery_by_id(gallery_id):
 		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
 		"Referer": NHENTAI_SERVER
 	}
+
+	# Nếu có cấu hình API KEY thì bổ sung vào Header
+	if NHENTAI_API_KEY:
+		headers["Authorization"] = f"Key {NHENTAI_API_KEY}"
+		headers["X-Api-Key"] = NHENTAI_API_KEY
 
 	# Gửi GET request với thời gian chờ tối đa 10 giây
 	response = requests.get(url, headers=headers, timeout=10)
@@ -184,3 +199,68 @@ if __name__ == "__main__":
 	print(cover_extensions)
 	print("\n=== TỔNG HỢP ĐUÔI TRANG TRUYỆN (PAGES) ===")
 	print(page_extensions)
+
+def get_user_favorites(page=1):
+    """Lấy danh sách truyện yêu thích từ tài khoản NHentai qua API v2."""
+    if not NHENTAI_API_KEY:
+        raise Exception("Chưa cấu hình NHENTAI_API_KEY trong file .env!")
+
+    url = f"{NHENTAI_SERVER}/api/v2/favorites?page={page}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": NHENTAI_SERVER,
+        "Authorization": f"Key {NHENTAI_API_KEY}"
+    }
+
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code == 200:
+        return resp.json()  # Trả về dict: {"result": [...], "total": ..., "num_pages": ...}
+    elif resp.status_code == 401:
+        raise Exception("API Key không hợp lệ hoặc không có quyền truy cập Favorites!")
+    else:
+        raise Exception(f"Lỗi khi lấy Favorites: HTTP {resp.status_code}")
+
+def get_user_favorites(page=1):
+    """Lấy danh sách truyện yêu thích tạm thời trực tiếp từ NHentai."""
+    if not NHENTAI_API_KEY:
+        raise Exception("Chưa cấu hình NHENTAI_API_KEY trong file .env!")
+
+    url = f"{NHENTAI_SERVER}/api/v2/favorites?page={page}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Referer": NHENTAI_SERVER,
+        "Authorization": f"Key {NHENTAI_API_KEY}"
+    }
+
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code == 200:
+        data = resp.json()
+        # Chuẩn hóa danh sách truyện để Frontend hiển thị lên lưới giống như truyện trong thư viện
+        items = []
+        for item in data.get("result", []):
+            media_id = item.get("media_id")
+            title_obj = item.get("title") or {}
+            title = title_obj.get("pretty") or item.get("english_title") or item.get("japanese_title") or f"Comic {item.get('id')}"
+            
+            # Ảnh bìa thumbnail từ CDN
+            thumb_info = item.get("thumbnail") or {}
+            thumb_path = thumb_info.get("path") if isinstance(thumb_info, dict) else f"galleries/{media_id}/thumb.jpg"
+            cover_url = f"{THUMB_SERVER}/{thumb_path}"
+
+            items.append({
+                "id": item.get("id"),
+                "title": title,
+                "author": "Từ NHentai",
+                "cover_url": cover_url,
+                "num_pages": item.get("num_pages", 0),
+                "is_external": True  # Đánh dấu đây là truyện tạm từ NHentai (chưa lưu CSDL)
+            })
+
+        return {
+            "items": items,
+            "total_comics": data.get("total", len(items)),
+            "page": page,
+            "total_pages": data.get("num_pages", 1)
+        }
+    else:
+        raise Exception(f"Lỗi khi lấy Favorites từ NHentai: HTTP {resp.status_code}")

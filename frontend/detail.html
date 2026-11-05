@@ -57,6 +57,20 @@
 
         <hr style="margin: 15px 0;">
 
+        <!-- BANNER THÔNG BÁO CHO TRUYỆN TẠM TỪ NHENTAI FAVORITES -->
+        <div id="externalNotice" style="display: none; background: rgba(255, 243, 205, 0.95); border: 1px solid #ffeeba; color: #856404; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <strong style="font-size: 15px; color: #d63384;">⭐ Truyện tạm từ NHentai Favorites (Chưa lưu vào thư viện)</strong>
+                <div style="font-size: 13px; color: #555;">Bạn đang đọc thử bộ truyện này. Nếu thấy hay, hãy chọn thư mục và bấm nút lưu để lưu trữ lâu dài!</div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <select id="externalFolderSelect" style="padding: 7px 10px; font-size: 13px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer;"></select>
+                <button type="button" id="btnSaveExternalComic" style="padding: 7px 16px; font-size: 13px; font-weight: bold; background: #198754; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    💾 Lưu vào Thư Viện
+                </button>
+            </div>
+        </div>
+
         <!-- KHU VỰC 1: THÔNG TIN BỘ TRUYỆN -->
         <div id="resultContainer">
             <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
@@ -232,9 +246,11 @@
             document.body.style.backgroundImage = `url("assets/${encodeURIComponent(savedBg)}")`;
         }
 
-        // Lấy ID bộ truyện từ thanh địa chỉ (vd: detail.html?id=14414)
+        // Lấy ID bộ truyện từ thanh địa chỉ (hỗ trợ cả id trong CSDL lẫn nhentai_id tạm)
         const urlParams = new URLSearchParams(window.location.search);
         const comicId = urlParams.get("id");
+        const nhentaiId = urlParams.get("nhentai_id");
+        const isExternal = !!nhentaiId;
 
         // ==================== 2. THAM CHIẾU CÁC PHẦN TỬ DOM ====================
         // Thông tin cơ bản của truyện
@@ -247,6 +263,9 @@
         const comicCategory = document.getElementById("comicCategory");
         const comicGenres = document.getElementById("comicGenres");
         const comicNumPages = document.getElementById("comicNumPages");
+        const externalNotice = document.getElementById("externalNotice");
+        const externalFolderSelect = document.getElementById("externalFolderSelect");
+        const btnSaveExternalComic = document.getElementById("btnSaveExternalComic");
 
         // Công cụ 1: Thêm Chapter mới từ Gallery ID khác
         const addChapterGalleryId = document.getElementById("addChapterGalleryId");
@@ -310,19 +329,23 @@
             const chapters = (currentComic && currentComic.chapters) ? currentComic.chapters : [];
 
             nextBatch.forEach(p => {
-                // Tự động xác định chapter chứa trang ảnh này để khi bấm vào sẽ mở đúng chapter và đúng trang đó
-                const matchedChapter = chapters.find(
-                    ch => String(ch.media_id) === String(currentComic.media_id) &&
-                          p.page_number >= ch.start_page &&
-                          p.page_number <= ch.end_page
-                ) || chapters[0];
-                const targetChapterId = matchedChapter ? matchedChapter.id : "";
+                const readerHref = isExternal
+                    ? `reader.html?nhentai_id=${nhentaiId}&page=${p.page_number}`
+                    : (() => {
+                        const matchedChapter = chapters.find(
+                            ch => String(ch.media_id) === String(currentComic.media_id) &&
+                                  p.page_number >= ch.start_page &&
+                                  p.page_number <= ch.end_page
+                        ) || chapters[0];
+                        const targetChapterId = matchedChapter ? matchedChapter.id : "";
+                        return `reader.html?comic_id=${currentComic.id}&chapter_id=${targetChapterId}&page=${p.page_number}`;
+                    })();
 
                 const card = document.createElement("div");
                 card.style.cssText = "border: 1px solid #ddd; padding: 6px; text-align: center; background: #fafafa; border-radius: 4px;";
                 card.innerHTML = `
                     <div style="font-size: 12px; margin-bottom: 4px; font-weight: bold; color: #2c3e50;">Trang ${p.page_number}</div>
-                    <a href="reader.html?comic_id=${currentComic.id}&chapter_id=${targetChapterId}&page=${p.page_number}">
+                    <a href="${readerHref}">
                         <img src="${getProxyImageUrl(p.url)}" alt="Trang ${p.page_number}" style="width: 100%; height: 160px; object-fit: cover; display: block; border-radius: 2px;" loading="lazy">
                     </a>
                 `;
@@ -339,78 +362,145 @@
 
         // 3.3. Tải toàn bộ thông tin chi tiết của bộ truyện từ Backend
         async function loadComicDetail() {
-            if (!comicId) return;
+            if (!comicId && !nhentaiId) return;
 
             try {
-                const [resp, foldersResp] = await Promise.all([
-                    fetch(`${API_BASE}/api/comics/${comicId}`),
-                    fetch(`${API_BASE}/api/folders`)
-                ]);
-                const comic = await resp.json();
-                if (!resp.ok) throw new Error(comic.detail || "Không tìm thấy truyện!");
-
+                const foldersResp = await fetch(`${API_BASE}/api/folders`);
                 const folders = foldersResp.ok ? await foldersResp.json() : [];
 
-                currentComic = comic;
-                document.title = `Thư Viện HManga — ${comic.title}`;
+                if (isExternal) {
+                    // TRƯỜNG HỢP 1: Truyện tạm từ NHentai Favorites (Chưa lưu CSDL)
+                    const resp = await fetch(`${API_BASE}/api/nhentai/${nhentaiId}`);
+                    const comic = await resp.json();
+                    if (!resp.ok) throw new Error(comic.detail || "Không tìm thấy truyện trên NHentai!");
 
-                // 1. Đổ thông tin cơ bản (Ảnh bìa, Tên truyện, ID, Tác giả, Ngôn ngữ, Thể loại)
-                comicCover.src = getProxyImageUrl(comic.cover_url);
-                comicTitle.textContent = comic.title;
-                comicIdEl.textContent = comic.id;
-                comicArtist.textContent = comic.author || "Unknown";
+                    currentComic = comic;
+                    document.title = `Thư Viện HManga (Đọc thử) — ${comic.title}`;
 
-                // Đổ danh sách thư mục vào ô chọn và chọn sẵn thư mục hiện tại của bộ truyện
-                if (folders.length > 0) {
-                    comicFolderSelect.innerHTML = folders
-                        .map(f => `<option value="${f.id}">${f.name}</option>`)
-                        .join("");
-                    comicFolderSelect.value = String(comic.folder_id || 1);
+                    // Hiện Banner lưu truyện
+                    if (externalNotice) {
+                        externalNotice.style.display = "flex";
+                        if (externalFolderSelect && folders.length > 0) {
+                            externalFolderSelect.innerHTML = folders.map(f => `<option value="${f.id}">${f.name}</option>`).join("");
+                            externalFolderSelect.value = "1";
+                        }
+                        if (btnSaveExternalComic) {
+                            btnSaveExternalComic.onclick = async () => {
+                                btnSaveExternalComic.disabled = true;
+                                btnSaveExternalComic.textContent = "Đang lưu...";
+                                try {
+                                    const targetFolder = parseInt(externalFolderSelect.value, 10) || 1;
+                                    const saveResp = await fetch(`${API_BASE}/api/comics`, {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ gallery_id: parseInt(nhentaiId, 10), folder_id: targetFolder })
+                                    });
+                                    const savedData = await saveResp.json();
+                                    if (!saveResp.ok) throw new Error(savedData.detail || "Không thể lưu truyện!");
+                                    alert(`Đã lưu thành công "${savedData.title}" vào thư viện!`);
+                                    window.location.href = `detail.html?id=${nhentaiId}`;
+                                } catch (e) {
+                                    alert(`Lỗi khi lưu: ${e.message}`);
+                                    btnSaveExternalComic.disabled = false;
+                                    btnSaveExternalComic.textContent = "💾 Lưu vào Thư Viện";
+                                }
+                            };
+                        }
+                    }
+
+                    // Đổ thông tin cơ bản
+                    comicCover.src = getProxyImageUrl(comic.cover_url);
+                    comicTitle.textContent = comic.title;
+                    comicIdEl.textContent = `${comic.id} (Tạm thời)`;
+                    comicArtist.textContent = (comic.artists && comic.artists.length > 0) ? comic.artists.join(", ") : "Unknown";
+
+                    comicFolderSelect.innerHTML = `<option value="">⭐ NHentai Favorites (Chưa lưu)</option>`;
+                    comicFolderSelect.disabled = true;
+
+                    comicLanguage.textContent = comic.language || "Unknown";
+                    comicCategory.textContent = comic.category || "Unknown";
+                    comicGenres.textContent = (comic.genres && comic.genres.length > 0) ? comic.genres.join(", ") : "Chưa có";
+                    comicNumPages.textContent = comic.num_pages;
+                    pagesCount.textContent = comic.num_pages;
+
+                    // Ẩn 2 công cụ chia chapter / gộp chapter
+                    if (addChapterGalleryId) addChapterGalleryId.closest("details").style.display = "none";
+                    if (splitRowsContainer) splitRowsContainer.closest("details").style.display = "none";
+
+                    // Danh sách chapter: 1 nút đọc toàn bộ
+                    chaptersList.innerHTML = `
+                        <a href="reader.html?nhentai_id=${nhentaiId}" style="padding: 10px 16px; background: #0d6efd; color: white; border: 1px solid #0d6efd; text-decoration: none; border-radius: 4px; font-size: 14px; font-weight: bold; display: inline-block;">
+                            📖 Đọc toàn bộ truyện (Trang 1 - ${comic.num_pages})
+                        </a>
+                    `;
+
+                    // Danh sách trang xem trước
+                    previewPages = (comic.pages || []).map((pUrl, idx) => ({
+                        page_number: idx + 1,
+                        url: pUrl
+                    }));
+                    pagesList.innerHTML = "";
+                    shownPagesCount = 0;
+                    renderMorePreviewPages();
+
                 } else {
-                    comicFolderSelect.innerHTML = `<option value="${comic.folder_id || 1}">${comic.folder_name || "Mặc định"}</option>`;
+                    // TRƯỜNG HỢP 2: Truyện chính thức trong Supabase (Chạy code cũ)
+                    const resp = await fetch(`${API_BASE}/api/comics/${comicId}`);
+                    const comic = await resp.json();
+                    if (!resp.ok) throw new Error(comic.detail || "Không tìm thấy truyện!");
+
+                    currentComic = comic;
+                    document.title = `Thư Viện HManga — ${comic.title}`;
+
+                    comicCover.src = getProxyImageUrl(comic.cover_url);
+                    comicTitle.textContent = comic.title;
+                    comicIdEl.textContent = comic.id;
+                    comicArtist.textContent = comic.author || "Unknown";
+
+                    if (folders.length > 0) {
+                        comicFolderSelect.innerHTML = folders.map(f => `<option value="${f.id}">${f.name}</option>`).join("");
+                        comicFolderSelect.value = String(comic.folder_id || 1);
+                    } else {
+                        comicFolderSelect.innerHTML = `<option value="${comic.folder_id || 1}">${comic.folder_name || "Mặc định"}</option>`;
+                    }
+
+                    comicLanguage.textContent = comic.language || "Unknown";
+                    comicCategory.textContent = comic.category || "Unknown";
+                    comicGenres.textContent = (comic.genres && comic.genres.length > 0) ? comic.genres.join(", ") : "Chưa có";
+                    comicNumPages.textContent = comic.num_pages;
+                    pagesCount.textContent = comic.num_pages;
+
+                    const chapters = comic.chapters || [];
+                    if (chapters.length === 0) {
+                        chaptersList.innerHTML = `<p style="color: #555; margin: 0;">Chưa có chapter nào.</p>`;
+                    } else {
+                        chaptersList.innerHTML = chapters.map(ch => {
+                            const chNum = Number(ch.chapter_number);
+                            return `
+                                <a href="reader.html?comic_id=${comic.id}&chapter_id=${ch.id}" style="padding: 9px 14px; background: rgba(255, 255, 255, 0.55); color: #2c3e50; border: 1px solid #ced4da; text-decoration: none; border-radius: 4px; font-size: 14px;">
+                                    Chapter ${chNum}: ${ch.title || ""} (Trang ${ch.start_page} - ${ch.end_page})
+                                </a>
+                            `;
+                        }).join("");
+                    }
+
+                    splitRowsContainer.innerHTML = "";
+                    const mainChapters = chapters.filter(ch => String(ch.media_id) === String(comic.media_id));
+                    if (mainChapters.length > 0) {
+                        mainChapters.forEach(ch => {
+                            splitRowsContainer.appendChild(
+                                createSplitRowHTML(ch.title || `Chapter ${Number(ch.chapter_number)}`, ch.start_page, ch.end_page)
+                            );
+                        });
+                    } else {
+                        splitRowsContainer.appendChild(createSplitRowHTML("Toàn bộ", 1, comic.num_pages));
+                    }
+
+                    previewPages = comic.pages || [];
+                    pagesList.innerHTML = "";
+                    shownPagesCount = 0;
+                    renderMorePreviewPages();
                 }
-
-                comicLanguage.textContent = comic.language || "Unknown";
-                comicCategory.textContent = comic.category || "Unknown";
-                comicGenres.textContent = (comic.genres && comic.genres.length > 0)
-                    ? comic.genres.join(", ")
-                    : "Chưa có";
-                comicNumPages.textContent = comic.num_pages;
-                pagesCount.textContent = comic.num_pages;
-
-                // 2. Đổ danh sách Chapter để người dùng bấm vào đọc
-                const chapters = comic.chapters || [];
-                if (chapters.length === 0) {
-                    chaptersList.innerHTML = `<p style="color: #555; margin: 0;">Chưa có chapter nào.</p>`;
-                } else {
-                    chaptersList.innerHTML = chapters.map(ch => {
-                        const chNum = Number(ch.chapter_number);
-                        return `
-                            <a href="reader.html?comic_id=${comic.id}&chapter_id=${ch.id}" style="padding: 9px 14px; background: rgba(255, 255, 255, 0.55); color: #2c3e50; border: 1px solid #ced4da; text-decoration: none; border-radius: 4px; font-size: 14px;">
-                                Chapter ${chNum}: ${ch.title || ""} (Trang ${ch.start_page} - ${ch.end_page})
-                            </a>
-                        `;
-                    }).join("");
-                }
-
-                // 3. Khởi tạo các dòng chia Chapter trong Công cụ 2 (chỉ lấy các chapter thuộc bộ truyện gốc)
-                splitRowsContainer.innerHTML = "";
-                const mainChapters = chapters.filter(ch => String(ch.media_id) === String(comic.media_id));
-                if (mainChapters.length > 0) {
-                    mainChapters.forEach(ch => {
-                        splitRowsContainer.appendChild(
-                            createSplitRowHTML(ch.title || `Chapter ${Number(ch.chapter_number)}`, ch.start_page, ch.end_page)
-                        );
-                    });
-                } else {
-                    splitRowsContainer.appendChild(createSplitRowHTML("Toàn bộ", 1, comic.num_pages));
-                }
-
-                // 4. Khởi tạo danh sách trang ảnh xem trước và hiển thị 12 trang đầu tiên
-                previewPages = comic.pages || [];
-                pagesList.innerHTML = "";
-                shownPagesCount = 0;
-                renderMorePreviewPages();
 
             } catch (err) {
                 alert(`Lỗi: ${err.message}`);

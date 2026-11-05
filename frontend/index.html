@@ -93,6 +93,7 @@
                 <label style="font-weight: bold; font-size: 14px; color: #2c3e50;">Thư mục:</label>
                 <select id="filterFolder" style="padding: 6px 10px; font-size: 14px; margin-left: 4px;">
                     <option value="">Tất cả thư mục</option>
+                    <option value="nhentai_favorites" style="font-weight: bold; color: #d63384;">⭐ NHentai Favorites (Chờ duyệt)</option>
                     <option value="1">Mặc định</option>
                     <option value="2">Yêu thích</option>
                 </select>
@@ -118,6 +119,8 @@
                 </button>
             </div>
         </div>
+
+
 
         <!-- KHU VỰC 3: LƯỚI DANH SÁCH TRUYỆN TRONG THƯ VIỆN -->
         <h3 style="margin-bottom: 12px; color: #2c3e50;">Danh sách truyện (<span id="comicsCount">2</span> bộ)</h3>
@@ -268,7 +271,8 @@
                 }
 
                 const currentFilterVal = filterFolder.value;
-                filterFolder.innerHTML = `<option value="">Tất cả thư mục</option>` + folderOptionsHTML;
+                const favOptionHTML = `<option value="nhentai_favorites" style="font-weight: bold; color: #d63384;">⭐ NHentai Favorites (Chờ duyệt)</option>`;
+                filterFolder.innerHTML = `<option value="">Tất cả thư mục</option>` + favOptionHTML + folderOptionsHTML;
                 filterFolder.value = currentFilterVal;
                 if (filterFolder.selectedIndex === -1) filterFolder.value = "";
             } catch (err) {
@@ -301,38 +305,119 @@
                 return;
             }
 
-            comicsGrid.innerHTML = comicsList.map(comic => `
-                <div style="border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: rgba(255, 255, 255, 0.5); display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <a href="detail.html?id=${comic.id}" style="text-decoration: none;">
-                            <img src="${getProxyImageUrl(comic.cover_url)}" alt="${comic.title}" style="width: 100%; height: auto; border-radius: 4px; display: block;" loading="lazy">
+            comicsGrid.innerHTML = comicsList.map(comic => {
+                const isExternal = !!comic.is_external;
+                const detailUrl = isExternal ? `detail.html?nhentai_id=${comic.id}` : `detail.html?id=${comic.id}`;
+                const badgeHTML = isExternal 
+                    ? `<span style="background: #e83e8c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-left: 4px;">Chờ duyệt</span>`
+                    : "";
+                const folderInfo = isExternal 
+                    ? `<span style="color: #e83e8c; font-weight: bold;">NHentai Favorites</span>`
+                    : (comic.folder_name || "Mặc định");
+                
+                const actionButtonsHTML = isExternal
+                    ? `
+                        <a href="${detailUrl}" style="flex: 1; padding: 6px; font-size: 12px; text-align: center; text-decoration: none; background: #0d6efd; color: white; font-weight: bold; border-radius: 4px;">
+                            Đọc thử
                         </a>
-                        <h4 style="margin: 8px 0 4px 0; font-size: 15px; color: #2c3e50;">
-                            <a href="detail.html?id=${comic.id}" style="text-decoration: none; color: inherit;">${comic.title}</a>
-                        </h4>
-                        <div style="font-size: 12px; color: #555; margin-bottom: 8px;">
-                            <div><strong>ID:</strong> ${comic.id} </div>
-                            <div><strong>Số trang:</strong> ${comic.num_pages}</div>
-                            <div><strong>Tác giả:</strong> <span style="color: #d63384; font-weight: bold;">${comic.author || "Unknown"}</span></div>
-                            <div><strong>Ngôn ngữ:</strong> ${comic.language || "Unknown"} </div>
-                            <div><strong>Thư mục:</strong> ${comic.folder_name || "Mặc định"}</div>
-                        </div>
-                    </div>
-                    <div style="display: flex; gap: 6px; margin-top: 6px;">
-                        <a href="detail.html?id=${comic.id}" style="flex: 1; padding: 6px; font-size: 12px; text-align: center; text-decoration: none; background: #0d6efd; color: white; font-weight: bold; border-radius: 4px;">
+                        <button type="button" onclick="handleSaveFavoriteComic(${comic.id}, this)" style="padding: 6px 10px; font-size: 12px; cursor: pointer; background: #198754; color: white; font-weight: bold; border: none; border-radius: 4px;">
+                            + Lưu
+                        </button>
+                    `
+                    : `
+                        <a href="${detailUrl}" style="flex: 1; padding: 6px; font-size: 12px; text-align: center; text-decoration: none; background: #0d6efd; color: white; font-weight: bold; border-radius: 4px;">
                             Đọc truyện
                         </a>
                         <button type="button" onclick="handleDeleteComic(${comic.id})" style="padding: 6px 10px; font-size: 12px; cursor: pointer; background: #dc3545; color: white; font-weight: bold; border: none; border-radius: 4px;">
                             Xóa
                         </button>
+                    `;
+
+                return `
+                    <div style="border: 1px solid #ddd; border-radius: 6px; padding: 10px; background: rgba(255, 255, 255, 0.5); display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <a href="${detailUrl}" style="text-decoration: none;">
+                                <img src="${getProxyImageUrl(comic.cover_url)}" alt="${comic.title}" style="width: 100%; height: auto; border-radius: 4px; display: block;" loading="lazy">
+                            </a>
+                            <h4 style="margin: 8px 0 4px 0; font-size: 15px; color: #2c3e50;">
+                                <a href="${detailUrl}" style="text-decoration: none; color: inherit;">${comic.title}</a> ${badgeHTML}
+                            </h4>
+                            <div style="font-size: 12px; color: #555; margin-bottom: 8px;">
+                                <div><strong>ID:</strong> ${comic.id} </div>
+                                <div><strong>Số trang:</strong> ${comic.num_pages}</div>
+                                <div><strong>Tác giả:</strong> <span style="color: #d63384; font-weight: bold;">${comic.author || "Unknown"}</span></div>
+                                <div><strong>Ngôn ngữ:</strong> ${comic.language || "Unknown"} </div>
+                                <div><strong>Thư mục:</strong> ${folderInfo}</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 6px; margin-top: 6px;">
+                            ${actionButtonsHTML}
+                        </div>
                     </div>
-                </div>
-            `).join("");
+                `;
+            }).join("");
+        }
+
+        // Lưu nhanh một truyện từ mục Favorites vào CSDL
+        async function handleSaveFavoriteComic(galleryId, btn) {
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = "...";
+            try {
+                const resp = await fetch(`${API_BASE}/api/comics`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ gallery_id: galleryId, folder_id: 1 })
+                });
+                const data = await resp.json();
+                if (!resp.ok) throw new Error(data.detail || "Không thể lưu truyện!");
+                btn.textContent = "Đã lưu ✓";
+                btn.style.background = "#6c757d";
+                alert(`Đã lưu thành công bộ truyện ID ${galleryId} vào thư mục Mặc định!`);
+            } catch (err) {
+                alert(`Lỗi khi lưu truyện: ${err.message}`);
+                btn.disabled = false;
+                btn.textContent = oldText;
+            }
         }
 
         // 3.4. Tải danh sách truyện theo trang (12 bộ / trang) kèm điều kiện lọc Thư mục & Tác giả
         async function loadComics(page = 1) {
             try {
+                // Nhánh đặc biệt: Người dùng xem thư mục tạm NHentai Favorites (Real-time từ NHentai API)
+                if (filterFolder.value === "nhentai_favorites") {
+                    filterAuthor.disabled = true;
+                    filterAuthor.style.opacity = "0.5";
+
+                    const resp = await fetch(`${API_BASE}/api/nhentai-favorites?page=${page}`);
+                    if (!resp.ok) throw new Error("Không thể tải danh sách Favorites từ NHentai!");
+                    const data = await resp.json();
+
+                    currentPage = data.page || 1;
+                    totalPages = data.total_pages || 1;
+
+                    sessionStorage.setItem("hmanga_current_page", currentPage);
+                    sessionStorage.setItem("hmanga_filter_folder", filterFolder.value);
+                    sessionStorage.setItem("hmanga_filter_author", "");
+
+                    comicsCount.textContent = `${data.total_comics ?? 0} (tạm thời)`;
+                    currentComicPage.value = currentPage;
+                    currentComicPage.max = totalPages;
+                    totalComicPages.textContent = totalPages;
+
+                    paginationBar.style.display = totalPages > 1 ? "flex" : (data.items.length > 0 ? "flex" : "none");
+                    btnPrevComicPage.disabled = currentPage <= 1;
+                    btnNextComicPage.disabled = currentPage >= totalPages;
+                    btnPrevComicPage.style.opacity = currentPage <= 1 ? "0.5" : "1";
+                    btnNextComicPage.style.opacity = currentPage >= totalPages ? "0.5" : "1";
+
+                    renderComicsGrid(data.items || []);
+                    return;
+                }
+
+                filterAuthor.disabled = false;
+                filterAuthor.style.opacity = "1";
+
                 const params = new URLSearchParams({
                     page: page,
                     limit: LIMIT_PER_PAGE

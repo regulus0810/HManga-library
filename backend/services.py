@@ -26,7 +26,7 @@ Chứa toàn bộ các hàm xử lý nghiệp vụ cốt lõi nối giữa API (
 
 import math
 from database import get_connection
-from nhentai import fetch_comic_from_nhentai
+from nhentai import fetch_comic_from_nhentai, get_user_favorites
 
 
 # ==================== 1. HÀM TIỆN ÍCH SINH LINK ẢNH ====================
@@ -869,3 +869,44 @@ if __name__ == "__main__":
         test_use_case(choice)
         
 
+def sync_favorites_from_nhentai(target_folder_id=2):
+    """
+    Quét toàn bộ truyện trong mục Favorites trên NHentai và đồng bộ về CSDL.
+    Mặc định lưu vào thư mục 'Yêu thích' (folder_id = 2).
+    """
+    # Lấy trang 1 để biết tổng số trang
+    first_page_data = get_user_favorites(page=1)
+    total_pages = first_page_data.get("num_pages", 1)
+    all_favorite_ids = [item["id"] for item in first_page_data.get("result", [])]
+
+    # Nếu có nhiều hơn 1 trang, duyệt tiếp các trang sau
+    for p in range(2, total_pages + 1):
+        page_data = get_user_favorites(page=p)
+        all_favorite_ids.extend([item["id"] for item in page_data.get("result", [])])
+
+    added_count = 0
+    already_exists_count = 0
+    errors = []
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for g_id in all_favorite_ids:
+                # Kiểm tra xem truyện đã có trong Supabase chưa
+                cur.execute("SELECT id FROM comics WHERE id = %s;", (g_id,))
+                if cur.fetchone():
+                    already_exists_count += 1
+                    continue
+
+                # Nếu chưa có thì cào và thêm vào thư viện
+                try:
+                    add_comic_by_gallery_id(gallery_id=g_id, folder_id=target_folder_id)
+                    added_count += 1
+                except Exception as e:
+                    errors.append(f"ID {g_id}: {str(e)}")
+
+    return {
+        "total_favorites": len(all_favorite_ids),
+        "added_count": added_count,
+        "already_exists_count": already_exists_count,
+        "errors": errors
+    }

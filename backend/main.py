@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from database import init_db
 import services
 import backup
-from nhentai import fetch_comic_from_nhentai
+from nhentai import fetch_comic_from_nhentai, get_user_favorites
 
 
 # ==================== 1. KHỞI TẠO FASTAPI & CẤU HÌNH HỆ THỐNG ====================
@@ -94,6 +94,13 @@ def get_comics(
     """Lấy danh sách truyện trong thư viện có phân trang (12 bộ mới nhất/trang) và hỗ trợ lọc theo Thư mục, Tác giả."""
     return services.get_all_comics(folder_id=folder_id, artist_id=artist_id, page=page, limit=limit)
 
+@app.get("/api/nhentai-favorites", summary="Lấy danh sách truyện Favorites tạm thời từ NHentai")
+def get_nhentai_favorites_route(page: int = Query(1, ge=1)):
+    """Trả về danh sách truyện Favorites trực tiếp từ NHentai mà không lưu vào Supabase."""
+    try:
+        return get_user_favorites(page=page)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/comics/check/{gallery_id}", summary="Kiểm tra ID và tên truyện trước khi thêm")
 def check_comic(gallery_id: int):
@@ -277,6 +284,14 @@ def get_nhentai_gallery(gallery_id: int):
 
 
 # ==================== 7. NHÓM API SAO LƯU & KHÔI PHỤC (BACKUP & RESTORE) ====================
+@app.post("/api/favorites/sync", summary="Đồng bộ danh sách truyện Yêu thích từ NHentai về CSDL")
+def sync_favorites(folder_id: Optional[int] = Query(2, description="ID thư mục muốn lưu, mặc định là Yêu thích (2)")):
+    """Tự động quét danh sách Favorites từ tài khoản NHentai và thêm những truyện mới vào thư viện."""
+    try:
+        result = services.sync_favorites_from_nhentai(target_folder_id=folder_id)
+        return {"status": "success", "result": result}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/backup", summary="Sao lưu toàn bộ dữ liệu từ Supabase ra file backup.json")
 def backup_library():
