@@ -1,10 +1,14 @@
-# 📚 HManga-library
+# HManga-library
 
-Ứng dụng web quản lý và đọc truyện tranh cá nhân — đồng bộ cơ sở dữ liệu đám mây với **Supabase (PostgreSQL)**, tích hợp trực tiếp **NHentai API v2** và hỗ trợ sao lưu / khôi phục dữ liệu.
+Website thư viện truyện tranh cá nhân 18+ — toàn bộ truyện tranh đều được lấy từ website [nhentai](https://nhentai.net/) và được lưu trữ tại **Supabase (PostgreSQL)**.
+
+Các chức năng chính:
+- Lưu trữ và đọc truyện tranh từ nhentai qua id.
+- Sao lưu và khôi phục dữ liệu.
 
 ---
 
-## 🏗️ Cấu trúc dự án
+## Cấu trúc dự án
 
 ```text
 HManga-library/
@@ -26,40 +30,38 @@ HManga-library/
 ├── requirements.txt               ← Danh sách thư viện Python cần thiết
 └── README.md                      ← Tài liệu hướng dẫn sử dụng dự án
 ```
-
-| Thành phần | Công nghệ | Chi tiết |
-|---|---|---|
-| **Frontend** | HTML5 + CSS + Vanilla JS | Tối giản, phản hồi nhanh, gói gọn trong 3 trang (`index.html`, `detail.html`, `reader.html`) |
-| **Backend** | FastAPI + Uvicorn | Cổng `8000` — phục vụ đồng thời cả REST API lẫn giao diện tĩnh Frontend |
-| **Database** | **Supabase (PostgreSQL)** | Kết nối trực tiếp qua `psycopg2`, tự động khởi tạo 7 bảng chuẩn hóa khi chạy server |
-| **Image Proxy** | **In-Memory Streaming (`requests`)** | Tải ảnh từ CDN về RAM rồi trả thẳng cho trình duyệt, vượt tường lửa ISP và không lưu rác ổ cứng |
-
 ---
 
-## ⚡ Cài đặt & Khởi chạy
+## Cài đặt & Khởi chạy
 
 ### Bước 1: Clone dự án
+Clone dự án tại đường linh này về máy: [Hmanga-library](https://github.com/regulus0810/HManga-library.git).
 ```powershell
-git clone https://github.com/NghianBig-2112/HManga-library.git
+git clone https://github.com/regulus0810/HManga-library.git
 cd HManga-library
 ```
 
-### Bước 2: Cài đặt thư viện Python
+### Bước 2: Cài đặt thư viện Python và tạo tài khoản Supabase
+Tại folder Hmanga-library, chạy câu lệnh sau để cài thư viện
 ```powershell
 pip install -r requirements.txt
 ```
+Truy cập vào [Supabase](https://supabase.com/) để tạo tài khoản.
+Tại `Project Overview` kích vào `copyy` rồi kích vào `Get Connected`, chọn `Direct Connection String`, chọn type=`URI` rồi copy đoạn mã `postgresql`
 
 ### Bước 3: Cấu hình biến môi trường (`.env`)
-Tạo file `.env` tại thư mục gốc của dự án (hoặc trong `backend/.env`) với chuỗi kết nối PostgreSQL từ **Supabase Dashboard** (*Project Settings $\rightarrow$ Database $\rightarrow$ Connection string $\rightarrow$ URI*):
+- Tạo file `.env` tại thư mục gốc của dự án (hoặc trong `backend/.env`) và copy toàn bộ nội dung trong `.env.example` vào file `.env`. Sau đó paste mã `postgresql` thay cho `DATABASE_URL`
+- Sau đó truy cập vào website [nhentai](https://nhentai.net/) để lấy `API KEY`
 ```env
-DATABASE_URL=postgresql://postgres.[YOUR-PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+DATABASE_URL=[YOUR DATABASE]
+NHENTAI_API_KEY=[YOUR API KEY]
 ```
 
 ### Bước 4: Khởi chạy Server
 Không cần tạo bảng thủ công trên Supabase — ngay khi khởi động, `main.py` sẽ tự động gọi `init_db(reset=False)` để tạo đầy đủ các bảng và thư mục **Mặc định** nếu chưa có:
 ```powershell
 cd backend
-uvicorn main:app --reload
+python main.py
 ```
 
 Mở trình duyệt truy cập: **http://127.0.0.1:8000**
@@ -72,7 +74,7 @@ Mở trình duyệt truy cập: **http://127.0.0.1:8000**
 
 ---
 
-## 📖 Tính năng chi tiết
+## Tính năng chi tiết
 
 ### 1. Trang chủ (`/index.html`)
 - **Kiểm tra truyện thông minh trước khi thêm (Nút `Tìm`):**
@@ -106,7 +108,7 @@ Mở trình duyệt truy cập: **http://127.0.0.1:8000**
 
 ---
 
-## 🔄 Sao lưu & Khôi phục dữ liệu (`backup.json`)
+## Sao lưu & Khôi phục dữ liệu (`backup.json`)
 
 Khi bạn muốn đẩy code lên GitHub và xóa project trên máy (hoặc khi project Supabase bị tạm dừng/xóa sau thời gian dài không dùng):
 1. **Sao lưu:** Bấm nút **Sao lưu** ở Trang chủ (hoặc chạy `python backup.py` $\rightarrow$ chọn `1`). Toàn bộ 7 bảng dữ liệu sẽ được xuất ra file `backup.json` ở thư mục gốc của project.
@@ -115,7 +117,7 @@ Khi bạn muốn đẩy code lên GitHub và xóa project trên máy (hoặc khi
 
 ---
 
-## 🗄️ Kiến trúc Cơ sở dữ liệu (7 Bảng PostgreSQL)
+## Kiến trúc Cơ sở dữ liệu (7 Bảng PostgreSQL)
 
 | Bảng | Khóa chính (PK) | Mô tả |
 |---|---|---|
@@ -126,3 +128,9 @@ Khi bạn muốn đẩy code lên GitHub và xóa project trên máy (hoặc khi
 | `comic_artists` | `(comic_id, artist_id)` | Bảng nối nhiều-nhiều giữa Truyện và Tác giả (`ON DELETE CASCADE`) |
 | `genres` | `id BIGINT` | Danh sách thể loại chi tiết (`id`, `name`, `slug`) |
 | `comic_genres` | `(comic_id, genre_id)` | Bảng nối nhiều-nhiều giữa Truyện và Thể loại (`ON DELETE CASCADE`) |
+
+## Các tính năng dự kiến phát triển trong tương lai:
+1. Chức năng dịch thuật tiếng anh và tiếng nhật
+2. Chức năng đọc truyện tự động
+3. Chức năng tóm tắt nội dung cốt truyện
+4. Chức năng sáng tạo truyện

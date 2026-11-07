@@ -162,64 +162,6 @@ def fetch_comic_from_nhentai(gallery_id):
 	data_extract = extract_gallery_data(raw_data)
 	return data_extract
 
-
-# ==================== 3. KỊCH BẢN KIỂM THỬ ĐỘC LẬP ====================
-if __name__ == "__main__":
-	# Quét thử nghiệm các Gallery ID để thống kê các định dạng đuôi ảnh trên NHentai
-	start_find = 500000
-	end_find = 686500
-	step = 1000  # Nhảy bước 1000 ID để khảo sát nhanh qua nhiều thời kỳ
-
-	page_extensions = set()
-	cover_extensions = set()
-
-	for i in range(start_find, end_find + 1, step):
-		try:
-			dict_data = fetch_comic_from_nhentai(i)
-
-			# 1. Kiểm tra đuôi của ảnh bìa (cover_url)
-			cover_file = dict_data["cover_url"].split("/")[-1]
-			cover_ext = "." + cover_file.split(".", 1)[1]
-			if cover_ext not in cover_extensions:
-				cover_extensions.add(cover_ext)
-				print(f"[ĐUÔI BÌA MỚI: {cover_ext}] -> ID {i}: {dict_data['cover_url']}")
-
-			# 2. Kiểm tra đuôi của tất cả các trang (pages)
-			for page_url in dict_data["pages"]:
-				filename = page_url.split("/")[-1]
-				ext = "." + filename.split(".", 1)[1]
-				if ext not in page_extensions:
-					page_extensions.add(ext)
-					print(f"[ĐUÔI TRANG MỚI: {ext}] -> ID {i}: {page_url}")
-
-		except Exception:
-			continue
-
-	print("\n=== TỔNG HỢP ĐUÔI ẢNH BÌA (COVER) ===")
-	print(cover_extensions)
-	print("\n=== TỔNG HỢP ĐUÔI TRANG TRUYỆN (PAGES) ===")
-	print(page_extensions)
-
-def get_user_favorites(page=1):
-    """Lấy danh sách truyện yêu thích từ tài khoản NHentai qua API v2."""
-    if not NHENTAI_API_KEY:
-        raise Exception("Chưa cấu hình NHENTAI_API_KEY trong file .env!")
-
-    url = f"{NHENTAI_SERVER}/api/v2/favorites?page={page}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Referer": NHENTAI_SERVER,
-        "Authorization": f"Key {NHENTAI_API_KEY}"
-    }
-
-    resp = requests.get(url, headers=headers, timeout=10)
-    if resp.status_code == 200:
-        return resp.json()  # Trả về dict: {"result": [...], "total": ..., "num_pages": ...}
-    elif resp.status_code == 401:
-        raise Exception("API Key không hợp lệ hoặc không có quyền truy cập Favorites!")
-    else:
-        raise Exception(f"Lỗi khi lấy Favorites: HTTP {resp.status_code}")
-
 def get_user_favorites(page=1):
     """Lấy danh sách truyện yêu thích tạm thời trực tiếp từ NHentai."""
     if not NHENTAI_API_KEY:
@@ -258,9 +200,49 @@ def get_user_favorites(page=1):
 
         return {
             "items": items,
+            "result": items,  # Đảm bảo tương thích nếu có module khác gọi
             "total_comics": data.get("total", len(items)),
             "page": page,
-            "total_pages": data.get("num_pages", 1)
+            "total_pages": data.get("num_pages", 1),
+            "num_pages": data.get("num_pages", 1)
         }
     else:
         raise Exception(f"Lỗi khi lấy Favorites từ NHentai: HTTP {resp.status_code}")
+
+# ==================== 3. KỊCH BẢN KIỂM THỬ ĐỘC LẬP ====================
+if __name__ == "__main__":
+	# Quét thử nghiệm các Gallery ID để thống kê các định dạng đuôi ảnh trên NHentai
+	start_find = 500000
+	end_find = 686500
+	step = 1000  # Nhảy bước 1000 ID để khảo sát nhanh qua nhiều thời kỳ
+
+	page_extensions = set()
+	cover_extensions = set()
+
+	for i in range(start_find, end_find + 1, step):
+		try:
+			dict_data = fetch_comic_from_nhentai(i)
+
+			# 1. Kiểm tra đuôi của ảnh bìa (cover_url)
+			cover_file = dict_data["cover_url"].split("/")[-1]
+			cover_ext = "." + cover_file.split(".", 1)[1]
+			if cover_ext not in cover_extensions:
+				cover_extensions.add(cover_ext)
+				print(f"[ĐUÔI BÌA MỚI: {cover_ext}] -> ID {i}: {dict_data['cover_url']}")
+
+			# 2. Kiểm tra đuôi của tất cả các trang (pages)
+			for page_url in dict_data["pages"]:
+				filename = page_url.split("/")[-1]
+				ext = "." + filename.split(".", 1)[1]
+				if ext not in page_extensions:
+					page_extensions.add(ext)
+					print(f"[ĐUÔI TRANG MỚI: {ext}] -> ID {i}: {page_url}")
+
+		except Exception:
+			continue
+
+	print("\n=== TỔNG HỢP ĐUÔI ẢNH BÌA (COVER) ===")
+	print(cover_extensions)
+	print("\n=== TỔNG HỢP ĐUÔI TRANG TRUYỆN (PAGES) ===")
+	print(page_extensions)
+
